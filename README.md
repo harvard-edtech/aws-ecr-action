@@ -1,6 +1,8 @@
-# AWS ECR Action
+# DCE ECR Action
 
-This Action allows you to create Docker images and push into a ECR repository.
+This action is designed to create docker images for the various
+[harvard-edtech](https://github.com/harvard-edtech) nodejs apps.
+
 
 ## Parameters
 | Parameter | Type | Default | Description |
@@ -10,32 +12,45 @@ This Action allows you to create Docker images and push into a ECR repository.
 | `account_id` | `string` | | Your AWS Account ID |
 | `repo` | `string` | | Name of your ECR repository |
 | `region` | `string` | | Your AWS region |
-| `create_repo` | `boolean` | `false` | Set this to true to create the repository if it does not already exist |
+| `create_repo` | `boolean` | `true` | Set this to true to create the repository if it does not already exist |
 | `tags` | `string` | `latest` | Comma-separated string of ECR image tags (ex latest,1.0.0,) |
+| `add_branch_tag` | `boolean` | `true` | Add an additional image tag based on the branch/revision name |
 | `dockerfile` | `string` | `Dockerfile` | Name of Dockerfile to use |
 | `extra_build_args` | `string` | `""` | Extra flags to pass to docker build (see docs.docker.com/engine/reference/commandline/build) |
 | `path` | `string` | `.` | Path to Dockerfile, defaults to the working directory |
 
-## Usage
+## A note about the Dockerfile
+
+If the project using this action does not have a `Dockerfile` in the project root directory
+a generic [default.Dockerfile](default.Dockerfile), which will work for the majority of our nodejs apps, will
+be used instead.
+
+## Example Usage
+
+This is how we roll at DCE
+
 ```yaml
+env:
+  REPOSITORY_NAME: hdce/my-cool-node-app
+
 jobs:
-  build-and-push:
+  build_and_push:
     runs-on: ubuntu-latest
     steps:
-    - uses: kciter/aws-ecr-action@v1
-      with:
-        access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        account_id: ${{ secrets.AWS_ACCOUNT_ID }}
-        repo: docker/repo
-        region: ap-northeast-2
-        tags: latest,${{ github.sha }}
-        create_repo: true
-```
+      - name: Check out the repo
+        uses: actions/checkout@v2
 
-## Reference
-* https://github.com/CircleCI-Public/aws-ecr-orb
-* https://github.com/elgohr/Publish-Docker-Github-Action
+      - name: Build + Push
+        uses: harvard-edtech/dce-ecr-action@v1
+        with:
+          access_key_id:  ${{ secrets.PUSH_TO_ECR_AWS_ACCESS_KEY_ID }}
+          secret_access_key: ${{ secrets.PUSH_TO_ECR_AWS_SECRET_ACCESS_KEY }}
+          account_id: ${{ secrets.AWS_ACCOUNT_ID }}
+          repo: ${{ env.REPOSITORY_NAME }}
+          region: ${{ secrets.AWS_DEFAULT_REGION }}
+          tags: ${{ github.sha }}
+          add_branch_tag: true
+```
 
 ## License
 The MIT License (MIT)

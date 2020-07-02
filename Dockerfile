@@ -7,6 +7,7 @@ RUN apk update \
   && pip install awscli \
   && apk --purge -v del py-pip
 
+ADD default.Dockerfile /default.Dockerfile
 ADD entrypoint.sh /entrypoint.sh
 
 RUN ["chmod", "+x", "/entrypoint.sh"]

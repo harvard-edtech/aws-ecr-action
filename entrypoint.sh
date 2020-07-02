@@ -13,7 +13,7 @@ function main() {
   aws_configure
   assume_role
   login
-  docker_build $INPUT_TAGS $ACCOUNT_URL
+  docker_build $INPUT_TAGS $ACCOUNT_URL $INPUT_ADD_BRANCH_TAG
   create_ecr_repo $INPUT_CREATE_REPO
   docker_push_to_ecr $INPUT_TAGS $ACCOUNT_URL
 }
@@ -70,7 +70,20 @@ function docker_build() {
     docker_tag_args="$docker_tag_args -t $2/$INPUT_REPO:$tag"
   done
 
-  docker build $INPUT_EXTRA_BUILD_ARGS -f $INPUT_DOCKERFILE $docker_tag_args $INPUT_PATH
+  if [ "${3}" = true ]; then
+    branch_tag=$(git rev-parse --abbrev-ref HEAD | sed -e 's/\//-/g')
+    docker_tag_args="$docker_tag_args -t $2/$INPUT_REPO:$branch_tag"
+  fi
+
+  if [ ! -f $INPUT_DOCKERFILE ]; then
+    echo "== USING DEFAULT Dockerfile"
+    DOCKERFILE="default.Dockerfile"
+  else
+    echo "== USING PROVIDED Dockerfile"
+    DOCKERFILE=$INPUT_DOCKERFILE
+  fi
+
+  docker build $INPUT_EXTRA_BUILD_ARGS -f $DOCKERFILE $docker_tag_args $INPUT_PATH
   echo "== FINISHED DOCKERIZE"
 }
 

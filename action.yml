@@ -1,5 +1,5 @@
-name: AWS ECR
-author: Lee Sun-Hyoup <kciter@naver.com>
+name: DCE ECR
+author: Jay Luker <jay_luker@harvard.edu>
 branding:
   icon: upload-cloud
   color: orange
@@ -26,10 +26,13 @@ inputs:
     required: true
   create_repo:
     description: Set this to true to create the repository if it does not already exist
-    default: false
+    default: true
   tags:
     description: Comma-separated string of ECR image tags
     default: latest
+  add_branch_tag:
+    description: Add an additional image tag based on the branch/revision name
+    default: true
   dockerfile:
     description: Name of Dockerfile to use
     default: Dockerfile
