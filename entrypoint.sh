@@ -37,7 +37,7 @@ function main() {
 
 function sanitize() {
   if [ -z "${1}" ]; then
-    >&2 echo "Unable to find the ${2}. Did you set with.${2}?"
+    echo >&2 "Unable to find the ${2}. Did you set with.${2}?"
     exit 1
   fi
 }
@@ -61,7 +61,7 @@ function assume_role() {
     echo "== START ASSUME ROLE"
     ROLE="arn:aws:iam::${INPUT_ACCOUNT_ID}:role/${INPUT_ASSUME_ROLE}"
     CREDENTIALS=$(aws sts assume-role --role-arn ${ROLE} --role-session-name ecrpush --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text)
-    read id key token <<< ${CREDENTIALS}
+    read id key token <<<${CREDENTIALS}
     export AWS_ACCESS_KEY_ID="${id}"
     export AWS_SECRET_ACCESS_KEY="${key}"
     export AWS_SESSION_TOKEN="${token}"
@@ -72,7 +72,7 @@ function assume_role() {
 function create_ecr_repo() {
   if [ "${1}" = true ]; then
     echo "== START CREATE REPO"
-    aws ecr describe-repositories --region $AWS_DEFAULT_REGION --repository-names $INPUT_REPO > /dev/null 2>&1 || \
+    aws ecr describe-repositories --region $AWS_DEFAULT_REGION --repository-names $INPUT_REPO >/dev/null 2>&1 ||
       aws ecr create-repository --region $AWS_DEFAULT_REGION --repository-name $INPUT_REPO
     echo "== FINISHED CREATE REPO"
   fi
@@ -87,6 +87,8 @@ function docker_build() {
   for tag in $DOCKER_TAGS; do
     docker_tag_args="$docker_tag_args -t $ACCOUNT_URL/$INPUT_REPO:$tag"
   done
+  docker_tag_args="$docker_tag_args -t ${INPUT_REPO}:scan-me"
+  echo ::set-output name=image_for_scanning::${INPUT_REPO}:scan-me
 
   local DOCKERFILE=$INPUT_DOCKERFILE
 
@@ -95,8 +97,8 @@ function docker_build() {
   else
     echo "== USING GENERIC Dockerfile"
     DOCKERFILE=$(mktemp)
-    cat << EOF > $DOCKERFILE
-FROM node:10-alpine
+    cat <<EOF >$DOCKERFILE
+FROM node:14-alpine
 
 # setting this here prevents dev dependencies from installing
 ENV NODE_ENV production
@@ -115,6 +117,24 @@ EXPOSE 8080
 ENV PORT 8080
 CMD ["npm", "start"]
 EOF
+
+    echo "== CREATING GENERIC .dockeringore"
+    # Must go in the root of the build context
+    cat <<EOF >$INPUT_PATH/.dockerignore
+# ignore all dot files/dirs
+.*
+
+# except for .dockerignore
+# https://codefresh.io/docker-tutorial/not-ignore-dockerignore-2/
+!.dockerignore
+
+node_modules
+test
+build
+dist
+*.md
+*.log
+EOF
   fi
 
   docker build $INPUT_EXTRA_BUILD_ARGS -f $DOCKERFILE $docker_tag_args $INPUT_PATH
@@ -129,8 +149,6 @@ function docker_push_to_ecr() {
   for tag in $DOCKER_TAGS; do
     image_with_tag=$INPUT_REPO:$tag
     docker push $ACCOUNT_URL/$image_with_tag
-    echo ::set-output name=image::$ACCOUNT_URL/$image_with_tag
-    slack_notify "Built and pushed *${image_with_tag}*"
   done
 
   echo "== FINISHED PUSH TO ECR"
@@ -141,7 +159,8 @@ function slack_notify() {
   if [ ! -z "${INPUT_SLACK_WEBHOOK_URL}" ]; then
     curl $INPUT_SLACK_WEBHOOK_URL \
       -X POST -H 'Content-type: application/json' \
-      --data @<(cat <<EOF
+      --data @<(
+        cat <<EOF
         {
           "blocks": [
             {

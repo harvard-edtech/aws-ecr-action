@@ -1,11 +1,14 @@
-FROM docker:19.03.4
+FROM docker:19.03.14
 
-RUN apk update \
-  && apk upgrade \
-  && apk add --no-cache --update python py-pip coreutils bash git nodejs curl \
-  && rm -rf /var/cache/apk/* \
-  && pip install awscli \
-  && apk --purge -v del py-pip
+RUN apk update && apk upgrade
+RUN apk add --no-cache \
+  python3 py3-pip coreutils bash git nodejs curl \
+  && pip3 install -U pip \
+  && pip3 install awscli \
+  && rm -rf /var/cache/apk/*
+
+RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | \
+  sh -s -- -b /usr/local/bin
 
 ADD entrypoint.sh /entrypoint.sh
 
