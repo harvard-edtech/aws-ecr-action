@@ -10,6 +10,10 @@ function main() {
 
   ACCOUNT_URL="$INPUT_ACCOUNT_ID.dkr.ecr.$INPUT_REGION.amazonaws.com"
 
+  SCAN_ME_LABEL=${INPUT_REPO}:scan-me
+  # also set an output to allow for other image scanning steps
+  echo ::set-output name=image_for_scanning::${SCAN_ME_LABEL}
+
   local TAGS=$INPUT_TAGS
   local GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD | sed -e 's/\//-/g')
 
@@ -25,12 +29,13 @@ function main() {
   fi
 
   local ECR_REPO_URL=https://console.aws.amazon.com/ecr/repositories/${INPUT_REPO}/
+  echo ::set-output name=ecr_repo_url::${ECR_REPO_URL}
 
-  slack_notify "Build triggered for ${INPUT_REPO}@${GIT_BRANCH}\nECR Repository: <${ECR_REPO_URL}|${INPUT_REPO}>"
   aws_configure
   assume_role
   login
   docker_build $TAGS $ACCOUNT_URL
+  image_scan
   create_ecr_repo $INPUT_CREATE_REPO
   docker_push_to_ecr $TAGS $ACCOUNT_URL
 }
@@ -87,8 +92,7 @@ function docker_build() {
   for tag in $DOCKER_TAGS; do
     docker_tag_args="$docker_tag_args -t $ACCOUNT_URL/$INPUT_REPO:$tag"
   done
-  docker_tag_args="$docker_tag_args -t ${INPUT_REPO}:scan-me"
-  echo ::set-output name=image_for_scanning::${INPUT_REPO}:scan-me
+  docker_tag_args="$docker_tag_args -t $SCAN_ME_LABEL"
 
   local DOCKERFILE=$INPUT_DOCKERFILE
 
@@ -139,6 +143,14 @@ EOF
 
   docker build $INPUT_EXTRA_BUILD_ARGS -f $DOCKERFILE $docker_tag_args $INPUT_PATH
   echo "== FINISHED DOCKERIZE"
+}
+
+function image_scan() {
+  echo "== BEGINNING IMAGE SCAN"
+  scan_results=$(trivy image --no-progress --ignore-unfixed \
+    --severity "MEDIUM,HIGH,CRITICAL" ${SCAN_ME_LABEL})
+  totals=$(echo "$scan_results" | grep '^Total')
+  slack_notify "Scan results: ${totals}"
 }
 
 function docker_push_to_ecr() {

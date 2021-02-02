@@ -17,7 +17,7 @@ inputs:
   assume_role:
     description: A role to assume under the account_id account.
     required: false
-    default: ''
+    default: ""
   repo:
     description: Name of your ECR repository
     required: true
@@ -41,16 +41,18 @@ inputs:
     default: Dockerfile
   extra_build_args:
     description: Extra flags to pass to docker build (see docs.docker.com/engine/reference/commandline/build)
-    default: ''
+    default: ""
   path:
     description: Path to Dockerfile, defaults to the working directory
     default: .
   slack_webhook_url:
     description: Slack Webhook URL for posting notifications
-    default: ''
+    default: ""
 outputs:
-  image:
-    description: 'The created image name'
+  image_for_scanning:
+    description: "The label:tag for a local image suitable for scanning"
+  ecr_repo_url:
+    description: "Link to the repo in the AWS ECR console"
 runs:
   using: docker
   image: Dockerfile
