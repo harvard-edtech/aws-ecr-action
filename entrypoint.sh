@@ -15,21 +15,31 @@ function main() {
   echo ::set-output name=image_for_scanning::${SCAN_ME_LABEL}
 
   local TAGS=$INPUT_TAGS
-  local GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD | sed -e 's/\//-/g')
+  local GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  local GIT_BRANCH_IMAGE_TAG=$(echo "$GIT_BRANCH" | sed -e 's/\//-/g')
 
   if [ "${INPUT_ADD_BRANCH_TAG}" = true ]; then
-    echo "== INCLUDING GIT BRANCH IMAGE TAG ${GIT_BRANCH}"
-    TAGS="$TAGS,$GIT_BRANCH"
+    echo "== INCLUDING GIT BRANCH IMAGE TAG ${GIT_BRANCH_IMAGE_TAG}"
+    TAGS="$TAGS,$GIT_BRANCH_IMAGE_TAG"
   fi
 
   if [ "${INPUT_ADD_PACKAGE_VERSION_TAG_FOR_BRANCH}" = "${GIT_BRANCH}" ]; then
-    package_version=$(node -p "require('./package.json').version")
-    echo "== INCLUDING PACKAGE VERSION IMAGE TAG ${package_version}"
-    TAGS="$TAGS,$package_version"
+    if [[ -f "version.txt" ]]; then
+      package_version=$(<version.txt)
+    elif [[ -f "package.json" ]]; then
+      package_version=$(node -p "require('./package.json').version")
+    fi
+
+    if [[ ! -z "${package_version}" ]]; then
+      echo "== INCLUDING PACKAGE VERSION IMAGE TAG ${package_version}"
+      TAGS="$TAGS,$package_version"
+    fi
   fi
 
-  local ECR_REPO_URL=https://console.aws.amazon.com/ecr/repositories/${INPUT_REPO}/
-  echo ::set-output name=ecr_repo_url::${ECR_REPO_URL}
+  local WORKFLOW_RUN_LINK="<https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}|${GITHUB_RUN_ID}>"
+  local GITHUB_LINK="<https://github.com/${GITHUB_REPOSITORY}/tree/${GIT_BRANCH}|${GITHUB_REPOSITORY}@${GIT_BRANCH}>"
+
+  slack_notify "Workflow ${WORKFLOW_RUN_LINK} triggered for ${GITHUB_LINK}"
 
   aws_configure
   assume_role
@@ -149,6 +159,7 @@ function image_scan() {
   echo "== BEGINNING IMAGE SCAN"
   scan_results=$(trivy image --no-progress --ignore-unfixed \
     --severity "MEDIUM,HIGH,CRITICAL" ${SCAN_ME_LABEL})
+  echo "$scan_results"
   totals=$(echo "$scan_results" | grep '^Total')
   slack_notify "Scan results: ${totals}"
 }
@@ -158,10 +169,14 @@ function docker_push_to_ecr() {
   local TAG=$1
   local ACCOUNT_URL=$2
   local DOCKER_TAGS=$(echo "$TAG" | tr "," "\n")
+  local ECR_REPO_LINK="<https://console.aws.amazon.com/ecr/repositories/private/${INPUT_ACCOUNT_ID}/${INPUT_REPO}?region=${INPUT_REGION}|${INPUT_REPO}>"
+  local slack_msg="Pushed the following image tags to ECR repository ${ECR_REPO_LINK}:"
   for tag in $DOCKER_TAGS; do
     image_with_tag=$INPUT_REPO:$tag
     docker push $ACCOUNT_URL/$image_with_tag
+    slack_msg="$slack_msg\n* ${image_with_tag}"
   done
+  slack_notify "$slack_msg"
 
   echo "== FINISHED PUSH TO ECR"
 }
